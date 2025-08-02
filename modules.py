@@ -1,6 +1,6 @@
 from pathlib import Path
-import inspect
 
+import datetime
 import pandas as pd
 import copy
 import matplotlib.pyplot as plt
@@ -13,62 +13,42 @@ from sklearn.preprocessing import LabelEncoder, OrdinalEncoder, OneHotEncoder
 from collections import defaultdict
 from sklearn.model_selection import RandomizedSearchCV, train_test_split, KFold
 
-class Dataset:
 
-    def __init__(self, data: pd.DataFrame, verbose=False):
-        self.verbose=verbose
-
-        self.data = copy.deepcopy(data).convert_dtypes()
-        self.feature_type = dict()
-
-        self.categorical_features = []
-        self.discrete_features = []
-        self.continuous_features = []
-        self.target = ''
-
-
-    def set_feature_types(
-            self, 
-            categorical_features: list[str] = [], 
-            discrete_features: list[str] = [], 
-            continuous_features: list[str] = [],
-            target: str = ''
-        ):
-        self.categorical_features = categorical_features
-        self.discrete_features = discrete_features
-        self.continuous_features = continuous_features
-        self.target = target
-        
-        for feature in self.categorical_features:
-            self.feature_type[feature] = 'categorical'
-            self.data[feature] = self.data[feature].astype('category')
-        for feature in self.discrete_features:
-            self.feature_type[feature] = 'discrete'
-            self.data[feature] = self.data[feature].astype('float')
-        for feature in self.continuous_features:
-            self.feature_type[feature] = 'continuous'
-            self.data[feature] = self.data[feature].astype('float')
-    
-        if self.verbose:
-            print('Categorical features: ' + ', '.join([str(attr) for attr in categorical_features]))
-            print('Discrete features: ' + ', '.join([str(attr) for attr in discrete_features]))
-            print('Continuous features:' + ', '.join([str(attr) for attr in continuous_features]))
-            print('Target variable: ' + self.target)
-
-class EDA(Dataset):
+class EDAPipeline:
     '''
     Todo:
     - Make the subplots add dynamic
     - Add checks
     '''
     def __init__(self, data, experiment_name='', path='', verbose=False):
-        super().__init__(data,verbose)
+        
+        self.verbose = verbose
+
+        self.data = copy.deepcopy(data).convert_dtypes()
+
+        self.feature_type = defaultdict()
+
         self.save= False
         if experiment_name != '' and path != '':
             self.save= True
             self.output_path = path + '/' + experiment_name + '/'
             Path(self.output_path).mkdir(parents=True, exist_ok=True)
             
+    def set_feature_types(self, feature_type):
+        
+        self.feature_type = feature_type
+        
+        for feature in self.feature_type['categorical']:
+            self.data[feature] = self.data[feature].astype('category')
+        for feature in self.feature_type['discrete']:
+            self.data[feature] = self.data[feature].astype('float')
+        for feature in self.feature_type['continuous']:
+            self.data[feature] = self.data[feature].astype('float')
+    
+        if self.verbose:
+            print('Categorical features: ' + ', '.join([str(feature) for feature in self.feature_type['categorical']]))
+            print('Discrete features: ' + ', '.join([str(feature) for feature in self.feature_type['discrete']]))
+            print('Continuous features:' + ', '.join([str(feature) for feature in self.feature_type['continuous']]))
 
     def num_of_duplicates(self, verbose = False):
         count = sum(self.data.duplicated())
@@ -80,7 +60,7 @@ class EDA(Dataset):
 
     def missing_values(self, figsize=(24,24)):
         count = dict()
-        for feature in self.categorical_features + self.discrete_features + self.continuous_features:
+        for feature in self.feature_type['categorical'] + self.feature_type['discrete']+ self.feature_type['continuous']:
             count[feature] = self.data[feature].isna().sum()
         count['_total_'] = sum([True for _, row in self.data.iterrows() if any(row.isnull())])
 
@@ -96,28 +76,41 @@ class EDA(Dataset):
         if self.verbose:
             print("Number of missing values")
             table = pd.DataFrame({
-                'Features': self.categorical_features + self.discrete_features + self.continuous_features + ['Total'],
-                'Percentage(%)': [100*count[feature]/self.data.shape[0] for feature in self.categorical_features + self.discrete_features + self.continuous_features] + [100*count['_total_']/self.data.shape[0]]
+                'Features': self.feature_type['categorical'] + self.feature_type['discrete'] + self.feature_type['continuous'] + ['Total'],
+                'Percentage(%)': [100*count[feature]/self.data.shape[0] for feature in self.feature_type['categorical'] + self.feature_type['discrete'] + self.feature_type['continuous']] + [100*count['_total_']/self.data.shape[0]]
             })
             print(table.to_string(index=False))
         else:
             plt.close(fig)
             return count
-        
 
-    def distribution_plots(self, rows, cols, figsize, group=None):
-        fig, ax = plt.subplots(rows, cols, figsize=figsize)
-        fig.suptitle('Distributions Plots',size='xx-large')
-        for index, feature in enumerate(self.categorical_features + self.discrete_features + self.continuous_features):
-            if feature == group:
-                sns.histplot(ax=ax[index // cols, index % cols], data=self.data, x=feature, discrete=True) 
-            elif self.feature_type[feature] == 'discrete' or 'categorical':
-                sns.histplot(ax=ax[index // cols, index % cols], data=self.data, x=feature, hue=group, discrete=True, multiple='stack') 
-            elif self.feature_type[feature] == 'continuous':
-                pass
-    
+
+    def distribution_plot(self, feature, group=None, ax=None):
+
+        assert group == None or group in self.feature_type['categorical']
+
+        if ax == None:
+            fig, ax = plt.subplots(layout='constrained')
+            fig.suptitle('Histogram for ' + feature)
+
+        discrete = feature in self.feature_type['discrete'] + self.feature_type['categorical']
+        kde = feature in self.feature_type['discrete'] + self.feature_type['continuous']
+
+        if group == None:
+            sns.histplot(ax=ax, data=self.data, x=feature, discrete=discrete, kde=kde)
+        else:
+            sns.histplot(ax=ax, data=self.data, x=feature, hue=group, discrete=discrete, multiple='stack', kde=kde)
+
+
+    def distribution_plots(self, dim, figsize, group = None):
+        fig = plt.figure(1, figsize=figsize, layout='constrained')
+        fig.suptitle('Histogram Plots', size=figsize[1])
+        for index, feature in enumerate(self.feature_type['categorical'] + self.feature_type['discrete'] + self.feature_type['continuous']):
+            ax = fig.add_subplot(dim[0], dim[1], index + 1)
+            self.distribution_plot(feature, group=group, ax=ax)
+
         if self.save:
-            fig.savefig(self.output_path + 'distribution_plots.png')
+            fig.savefig(self.output_path + 'histogram_plots.png')
 
         if self.verbose:
             pass
@@ -125,9 +118,9 @@ class EDA(Dataset):
             plt.close(fig)
 
     def box_plots(self, rows, cols, figsize, group=None):
-        fig, ax = plt.subplots(rows, cols, figsize=figsize)
+        fig, ax = plt.subplots(rows, cols, figsize=figsize, layout='constrained')
         fig.suptitle('Box Plots',size='xx-large')
-        for index, feature in enumerate(self.discrete_features + self.continuous_features):
+        for index, feature in enumerate(self.feature_type['discrete'] + self.feature_type['continuous']):
             if group == None or feature == group:
                 sns.boxplot(ax=ax[index // cols, index % cols], data=self.data, y=feature)
             else:
@@ -141,69 +134,69 @@ class EDA(Dataset):
         else:
             plt.close(fig)
 
-    def heat_maps(self, figsize, target=None, value=None, verbose=False):
-        
-        cmap = cm.get_cmap('magma')
-        fig = plt.figure(1, figsize=figsize, layout='constrained')
-        title = 'Heatmap of distribution along two-variables'
+    #def heat_maps(self, figsize, target=None, value=None, verbose=False):
+    #    
+    #    cmap = cm.get_cmap('magma')
+    #    fig = plt.figure(1, figsize=figsize, layout='constrained')
+    #    title = 'Heatmap of distribution along two-variables'
 
-        features = self.discrete_features + self.continuous_features
+    #    features = self.feature_type['discrete'] + self.feature_type['continuous']
 
-        # Compute pivot tables and track largest frequency
-        max_freq = 0
-        pivot = dict()
-        for i in range(1,len(features)):
-            for j in range(i):
-                pivot[frozenset([features[i], features[j]])] = self.data.groupby(features[i])[features[j]].value_counts(dropna=True).unstack(fill_value=0).astype(int)
-                max_freq = max(max_freq, pivot[frozenset([features[i], features[j]])].to_numpy().max())
+    #    # Compute pivot tables and track largest frequency
+    #    max_freq = 0
+    #    pivot = dict()
+    #    for i in range(1,len(features)):
+    #        for j in range(i):
+    #            pivot[frozenset([features[i], features[j]])] = self.data.groupby(features[i])[features[j]].value_counts(dropna=True).unstack(fill_value=0).astype(int)
+    #            max_freq = max(max_freq, pivot[frozenset([features[i], features[j]])].to_numpy().max())
 
-        if target != None and value != None:
-            assert target in self.categorical_features and value in self.data[target].unique(), 'target not a categorical variable or value is not a possible category.'
-            
-            for i in range(1, len(features)):
-                for j in range(i):
-                    value_pivot = self.data.groupby([features[i], features[j]])[target].value_counts().unstack(fill_value=0).loc[:,value].unstack(fill_value=0)
-                    pivot[frozenset([features[i], features[j]])] = 100*value_pivot.div(pivot[frozenset([features[i], features[j]])] + 1.e-17)
+    #    if target != None and value != None:
+    #        assert target in self.feature_type['categorical'] and value in self.data[target].unique(), 'target not a categorical variable or value is not a possible category.'
+    #        
+    #        for i in range(1, len(features)):
+    #            for j in range(i):
+    #                value_pivot = self.data.groupby([features[i], features[j]])[target].value_counts().unstack(fill_value=0).loc[:,value].unstack(fill_value=0)
+    #                pivot[frozenset([features[i], features[j]])] = 100*value_pivot.div(pivot[frozenset([features[i], features[j]])] + 1.e-17)
 
-            max_freq = 100
-            title += ' (' + value + ' proportions)'
+    #        max_freq = 100
+    #        title += ' (' + value + ' proportions)'
 
-        # Plot heat maps along upper left triangle
-        fig.suptitle(title, size='xx-large')
+    #    # Plot heat maps along upper left triangle
+    #    fig.suptitle(title, size='xx-large')
 
-        n = len(features) - 1
-        for i in range(1, n + 1):
-            for j in range(i):
-                ax = fig.add_subplot(n, n, (i - 1)*n + (j + 1))
-                sns.heatmap(ax=ax, data=pivot[frozenset([features[i], features[j]])],
-                    cbar=False, vmax=max_freq, vmin=0, cmap=cmap, annot=True, fmt='.0f')
-                ax.invert_yaxis()
+    #    n = len(features) - 1
+    #    for i in range(1, n + 1):
+    #        for j in range(i):
+    #            ax = fig.add_subplot(n, n, (i - 1)*n + (j + 1))
+    #            sns.heatmap(ax=ax, data=pivot[frozenset([features[i], features[j]])],
+    #                cbar=False, vmax=max_freq, vmin=0, cmap=cmap, annot=True, fmt='.0f')
+    #            ax.invert_yaxis()
 
-                if i < n:
-                    ax.tick_params(axis='x', which='both', bottom=False,top=False,labelbottom=False)
-                    ax.xaxis.set_visible(False)
-                else:
-                    ax.tick_params(axis='x', labelrotation=90)
-                if j > 0:
-                    ax.tick_params(axis='y', which='both', left=False,right=False,labelleft=False)
-                    ax.yaxis.set_visible(False)
-                else:
-                    ax.tick_params(axis='y', labelrotation=0)
-                    
+    #            if i < n:
+    #                ax.tick_params(axis='x', which='both', bottom=False,top=False,labelbottom=False)
+    #                ax.xaxis.set_visible(False)
+    #            else:
+    #                ax.tick_params(axis='x', labelrotation=90)
+    #            if j > 0:
+    #                ax.tick_params(axis='y', which='both', left=False,right=False,labelleft=False)
+    #                ax.yaxis.set_visible(False)
+    #            else:
+    #                ax.tick_params(axis='y', labelrotation=0)
+    #                
 
-        # Shared colorbar
-        normalizer = Normalize(0, max_freq)
-        im = cm.ScalarMappable(norm=normalizer)
-        fig.colorbar(im, ax=fig.axes)
+    #    # Shared colorbar
+    #    normalizer = Normalize(0, max_freq)
+    #    im = cm.ScalarMappable(norm=normalizer)
+    #    fig.colorbar(im, ax=fig.axes)
 
-        if self.save:
-            fig.savefig(self.output_path + 'correlation_heat_maps.png')
+    #    if self.save:
+    #        fig.savefig(self.output_path + 'correlation_heat_maps.png')
 
-        if self.verbose:
-            pass
-        else:
-            plt.close(fig)
-            return pivot
+    #    if self.verbose:
+    #        pass
+    #    else:
+    #        plt.close(fig)
+    #        return pivot
 
     def outlier_analysis(self, feature, target, sigma, figsize):
         
@@ -241,16 +234,16 @@ class EDA(Dataset):
 
     def KS_test(self, new_EDA):
         # Find intersection of columns
-        features = set(self.discrete_features + self.continuous_features) & set(new_EDA.discrete_features + new_EDA.continuous_features)
+        features = set(self.feature_type['discrete'] + self.feature_type['continuous']) & set(new_EDA.feature_type['discrete'] + new_EDA.feature_type['continuous'])
         
         ks_statistic = dict()
 
         for feature in features:
             training = self.data[feature]
             testing = new_EDA.data[feature]
-            if feature in self.discrete_features or self.continuous_features:
+            if feature in self.feature_type['discrete'] or self.feature_type['continuous']:
                 ks_statistic[feature] = stats.kstest(rvs=training.dropna(),cdf=testing.dropna())
-            #if feature in self.discrete_features or self.categorical_features:
+            #if feature in self.feature_type['discrete'] or self.feature_type['categorical']:
             #    training_count = training.value_counts().sort_index().to_numpy()
             #    testing_count= testing.value_counts().sort_index().to_numpy()
             #    cs_statistic = stats.chi2_contingency(np.array([training_count, testing_count]))
@@ -631,6 +624,13 @@ class PreprocessingPipeline:
                 }
             )
         )
+
+    @staticmethod
+    def ymd_to_time(year: list[int], month: list[int], day: list[int]):
+        assert max(month) <= 12 and min(month) > 0, 'There are months outside range.' 
+        assert max(day) <= 31 and min(day) > 0, 'There are days outside range.' 
+
+        return [datetime.datetime(y, m, d) for y,m,d in zip(year, month, day)]
 
 class ModelingPipeline:
 
