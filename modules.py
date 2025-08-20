@@ -412,7 +412,7 @@ class PreprocessingPipeline:
         return train, test
 
     @staticmethod
-    def replace_col(data: pd.DataFrame, col_name: str, new_col):
+    def static_replace_col(data: pd.DataFrame, col_name: str, new_col):
         return pd.concat(
             [
                 data.drop(col_name, axis=1),
@@ -420,6 +420,19 @@ class PreprocessingPipeline:
             ],
             axis=1
         )
+
+    def replace_col(self, col_name: str, new_col):
+        self.pipeline.append(
+            (
+                '',
+                self.static_replace_col,
+                {
+                    'col_name': col_name,
+                    'new_col': new_col
+                }
+            )
+        )
+    
 
     ### Phase 1: Data Imputation
 
