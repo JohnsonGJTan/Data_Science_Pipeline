@@ -518,30 +518,44 @@ class PreprocessingPipeline:
     ### Phase 2: Outlier Preprocessing
 
     @staticmethod
-    def static_outlier_preprocessing(train: pd.DataFrame, test: pd.DataFrame, col_name: str, sigma: int, method: str, bounds = []):
-        
-        methods = ['clip', 'remove']
+    def _outlier_preprocessing(
+        train: pd.DataFrame,
+        test: pd.DataFrame,
+        col_name: str,
+        outlier_levels: list[int],
+        impute_method: str,
+        #bounds= []
+    ):
+        methods = ['clip', 'remove', 'none']
+        assert impute_method in methods, 'impute method unknown'
+        assert sum(train[col_name].isna()) + sum(test[col_name].isna()) == 0, 'column contains missing values which need to be imputed.'
+        assert outlier_levels == sorted(outlier_levels), 'sigmas are not sorted'
+        assert outlier_levels[0] > 0, 'smallest sigma must be positive'
 
-        assert method in methods, 'Method unknown.'
-        
-        assert sum(train[col_name].isna()) + sum(test[col_name].isna()) == 0, 'Column contains missing values which need to be imputed.'
+        mean = train[col_name].mean()
+        std = train[col_name].std()
 
-        if len(bounds) != 2:
-            mean = train[col_name].mean()
-            std = train[col_name].std()
-            ub = mean + sigma*std
-            lb = mean - sigma*std
-        else:
-            lb, ub = bounds
+        # compute outlier mask level
+        outlier_mask_train = [0] * train.shape[0]
+        outlier_mask_test = [0] * test.shape[0]
 
-        outlier_mask_train = [True if val < lb or val > ub else False for val in train[col_name]]
-        outlier_mask_test = [True if val < lb or val > ub else False for val in test[col_name]]
+        for sigma in outlier_levels:
+            ub = mean + sigma * std
+            lb = mean - sigma * std
+            sigma_mask_train = [1 if val > ub else -1 if val < lb else 0 for val in train[col_name]]
+            sigma_mask_test = [1 if val > ub else -1 if val < lb else 0 for val in test[col_name]]
 
-        if method == 'remove':
-            return train.drop(outlier_mask_train), test
-        elif method == 'clip':
-            outlier_impute_train = train[col_name].clip(lower=lb, upper=ub)
-            outlier_impute_test = test[col_name].clip(lower=lb, upper=ub)
+            outlier_mask_train = [a + b for a, b in zip(outlier_mask_train, sigma_mask_train)]
+            outlier_mask_test = [a + b for a, b in zip(outlier_mask_test, sigma_mask_test)]
+
+        lub = mean + outlier_levels[0] * std
+        glb = mean - outlier_levels[0] * std
+
+        if impute_method == 'remove':
+            return train.drop([1 if val > 0 else 0 for val in outlier_mask_train]), test
+        elif impute_method == 'clip':
+            outlier_impute_train = train[col_name].clip(lower=glb, upper=lub)
+            outlier_impute_test = test[col_name].clip(lower=glb, upper=lub)
             return pd.concat(
                 [
                     PreprocessingPipeline.static_replace_col(train, col_name, outlier_impute_train),
@@ -555,17 +569,30 @@ class PreprocessingPipeline:
                 ],
                 axis=1
             )
+        elif impute_method == 'none':
+            return pd.concat(
+                [
+                    train,
+                    pd.Series(outlier_mask_train, name=col_name + '_outlier_mask')
+                ],
+                axis=1
+            ), pd.concat(
+                [
+                    test,
+                    pd.Series(outlier_mask_test, name=col_name + '_outlier_mask')
+                ],
+                axis=1
+            )
 
-    def outlier_preprocessing(self, col_name, sigma, method = 'remove', bounds = []):
+    def outlier_preprocessing(self, col_name, outlier_levels, impute_method = 'clip'):
         self.pipeline.append(
             (
-                'outlier preprocessing on ' + col_name + 'using ' + method + ' method.',
-                self.static_outlier_preprocessing,
+                '',
+                self._outlier_preprocessing,
                 {
                     'col_name': col_name,
-                    'sigma': sigma,
-                    'method': method,
-                    'bounds': bounds
+                    'outlier_levels': outlier_levels,
+                    'impute_method': impute_method,
                 }
             )
         )
