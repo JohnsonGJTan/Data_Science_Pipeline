@@ -25,6 +25,8 @@ class EDAPipeline:
         self.verbose = verbose
 
         self.data = copy.deepcopy(data).convert_dtypes()
+        self.nrows = data.shape[0]
+        self.ncols = data.shape[1]
 
         self.feature_type = defaultdict()
 
@@ -57,7 +59,6 @@ class EDAPipeline:
         else:
             return count
 
-
     def missing_values(self, figsize=(24,24)):
         count = dict()
         for feature in self.feature_type['categorical'] + self.feature_type['discrete']+ self.feature_type['continuous']:
@@ -88,55 +89,203 @@ class EDAPipeline:
             plt.close(fig)
             return count
 
+    def plot_grid(self, features, title, plot, dim, figsize, **kwargs):
+        fig = plt.figure(figsize=figsize, layout='constrained')
+        fig.suptitle(title, size=figsize[1])
+        subfigs = fig.subfigures(dim[0], dim[1])
 
-    def distribution_plot(self, feature, group=None, ax=None):
+        if dim[0] == 1 or dim[1] == 1:
+            indexing = list(range(len(features)))
+        else:
+            indexing = list(product(range(dim[0]), range(dim[1])))[:len(features)]
+        
+        for index, feature in zip(indexing, features):
+            if isinstance(index, int):
+                subfig = subfigs[index]
+            else:
+                subfig = subfigs[index[0]][index[1]]
+            plot(feature=feature, fig=subfig, **kwargs)
+
+        if self.save:
+            fig.savefig(self.output_path + title + '.png')
+        
+        if self.verbose:
+            pass
+        else:
+            plt.close(fig)
+
+    def distribution_plot(self, feature, group=None, fig=None):
 
         assert group == None or group in self.feature_type['categorical']
 
-        if ax == None:
+        if fig == None:
             fig, ax = plt.subplots(layout='constrained')
             fig.suptitle('Histogram for ' + feature)
+        else:
+            #assert isinstance(fig, Figure.subfigures), 'Invalid fig'
+            ax = fig.add_subplot(111)
 
         discrete = feature in self.feature_type['discrete'] + self.feature_type['categorical']
         kde = feature in self.feature_type['discrete'] + self.feature_type['continuous']
 
+        sns.histplot(ax=ax, data=self.data, x=feature, hue=group, discrete=discrete, multiple='stack', kde=kde)
+
+        # create overall bar labesl
+        if len(ax.containers[0]) < 15:
+            overall_bar_height = [rect.get_y() + rect.get_height() for rect in ax.containers[-1]]
+            ax.bar_label(ax.containers[-1], [f"{height/self.nrows:.2%}" for height in overall_bar_height])
+            # create group bar labels
+            if group != None and group != feature:
+                
+                group_bar_height = [rect.get_height() for rect in ax.containers[0]]
+                ax.bar_label(
+                    ax.containers[0],
+                    [f"{(h_group/h_overall):.2%}" if h_overall >0 else '' for h_group, h_overall in zip(group_bar_height, overall_bar_height)]
+                )
+
+
+
+    def box_plot(self, feature, group=None, fig=None):
+        
+        assert group == None or group in self.feature_type['categorical'], 'invalid group.'
+        assert feature in self.feature_type['discrete'] + self.feature_type['continuous'], 'feature is not of discrete or continuous type.'
+
+        if fig== None:
+            fig, ax = plt.subplots(layout='constrained')
+            fig.suptitle('Boxplot for ' + feature)
+        else:
+            ax = fig.add_subplot(111)
+
         if group == None:
-            sns.histplot(ax=ax, data=self.data, x=feature, discrete=discrete, kde=kde)
+            sns.boxplot(ax=ax, data=self.data, y=feature)
         else:
-            sns.histplot(ax=ax, data=self.data, x=feature, hue=group, discrete=discrete, multiple='stack', kde=kde)
+            sns.boxplot(ax=ax, data=self.data, x=group, y=feature, hue=group)
 
+    #def outlier_plot(self, feature, group: str, sigma=2, fig=None, include_base: bool = True):
+    #    
+    #    mean = self.data[feature].mean()
+    #    std = self.data[feature].std()
 
-    def distribution_plots(self, dim, figsize, group = None):
-        fig = plt.figure(1, figsize=figsize, layout='constrained')
-        fig.suptitle('Histogram Plots', size=figsize[1])
-        for index, feature in enumerate(self.feature_type['categorical'] + self.feature_type['discrete'] + self.feature_type['continuous']):
-            ax = fig.add_subplot(dim[0], dim[1], index + 1)
-            self.distribution_plot(feature, group=group, ax=ax)
+    #    upper_bound = mean + sigma*std
+    #    lower_bound = mean - sigma*std
+    #    outlier_mask = [True if val > upper_bound or val < lower_bound else False for val in self.data[feature]]
+    #    
+    #    if fig == None:
+    #        fig = plt.figure(layout='constrained')
 
-        if self.save:
-            fig.savefig(self.output_path + 'histogram_plots.png')
+    #    title = 'Distribution of ' + group + ' for outliers in ' + feature
 
-        if self.verbose:
-            pass
-        else:
-            plt.close(fig)
+    #    if sum(outlier_mask) == 0:
+    #        ax = fig.add_subplot(111)
+    #        fig.text(0.5,0.5, 'No outliers')
+    #        ax.set_axis_off()
+    #    else: 
+    #        outlier_counts = self.data.loc[outlier_mask,group].value_counts().sort_index()
+    #        
+    #        if include_base:
+    #            ax_outlier = fig.add_subplot(1,2,1)
+    #        else:
+    #            ax_outlier = fig.add_subplot(1,1,1)
 
-    def box_plots(self, rows, cols, figsize, group=None):
-        fig, ax = plt.subplots(rows, cols, figsize=figsize, layout='constrained')
-        fig.suptitle('Box Plots',size='xx-large')
-        for index, feature in enumerate(self.feature_type['discrete'] + self.feature_type['continuous']):
-            if group == None or feature == group:
-                sns.boxplot(ax=ax[index // cols, index % cols], data=self.data, y=feature)
+    #        sns.barplot(x=outlier_counts.index, y=outlier_counts.values, ax=ax_outlier)
+    #        ax_outlier.bar_label(ax_outlier.containers[0], labels=[f"{x/sum(outlier_counts.values):.2%}" for x in outlier_counts.values])
+
+    #        if include_base:
+    #            title += ' (L) vs not outliers (R)'
+    #            not_outlier_counts = self.data[group].value_counts().sort_index()
+    #            ax_base = fig.add_subplot(1,2,2)
+    #            sns.barplot(x=not_outlier_counts.index, y=not_outlier_counts.values, ax=ax_base)
+    #            ax_base.bar_label(ax_base.containers[0], labels=[f"{x/sum(not_outlier_counts.values):.2%}" for x in not_outlier_counts.values])
+
+    #    fig.suptitle(title, size='xx-large')
+
+    #    if self.save:
+    #        fig.savefig(self.output_path + 'outlier_' + feature + '_distribution_plots.png')
+
+    #    if self.verbose:
+    #        count = sum(outlier_mask)
+    #        print(str(count) + ' outliers at sigma=' + str(sigma) + ' for ' + feature + '. Bounds given by [' + str(lower_bound) + ',' + str(upper_bound) + '].')
+    #    else:
+    #        plt.close(fig)
+    #        return (lower_bound, upper_bound), outlier_mask
+
+    def outlier_plot(self, feature, group: str, sigma: list[int] = [2], fig=None, include_base: bool = True):
+        
+        assert len(set(self.data[group])) < 10, 'group has too many groups!'
+
+        mean = self.data[feature].mean()
+        std = self.data[feature].std()
+
+        data_long = pd.DataFrame(
+            {
+                group: [],
+                'count': [],
+                'sigma': [],
+            }
+            
+        )
+
+        # compute outlier masks for the various sigmas
+        for sig in sigma:
+            ub, lb = mean + sig*std, mean - sig*std
+            outlier_mask = [True if val >= ub or val <= lb else False for val in self.data[feature]]
+
+            if sum(outlier_mask) == 0:
+                break
+
+            group_distribution = pd.DataFrame(self.data.loc[outlier_mask, group].value_counts()/self.data.loc[outlier_mask, group].value_counts().sum()).reset_index()
+            group_distribution['sigma'] = sig
+
+            if data_long.empty:
+                data_long = group_distribution
             else:
-                sns.boxplot(ax=ax[index // cols, index % cols], data=self.data, x=group, y=feature, hue=group)
+                data_long = pd.concat([data_long, group_distribution])
+        
+        data_long.columns = [group, 'percentage', 'sigma']
 
-        if self.save:
-            fig.savefig(self.output_path + 'box_plots.png')
+        if fig == None:
+            fig = plt.figure(layout='constrained')
+        
+        fig.suptitle('Distribution of ' + group + ' for outliers in ' + feature + '.', size='xx-large')
+        ax = fig.add_subplot(111)
+        ax.set_ylim(0,1)
+        sns.barplot(
+            data=data_long,
+            x='sigma',
+            y='percentage',
+            hue=group,
+            ax=ax
+        )
 
+
+    def KS_test(self, new_EDA):
+        # Find intersection of columns
+        features = set(self.feature_type['discrete'] + self.feature_type['continuous']) & set(new_EDA.feature_type['discrete'] + new_EDA.feature_type['continuous'])
+        
+        ks_statistic = dict()
+
+        for feature in features:
+            training = self.data[feature]
+            testing = new_EDA.data[feature]
+            if feature in self.feature_type['discrete'] or self.feature_type['continuous']:
+                ks_statistic[feature] = stats.kstest(rvs=training.dropna(),cdf=testing.dropna())
+            #if feature in self.feature_type['discrete'] or self.feature_type['categorical']:
+            #    training_count = training.value_counts().sort_index().to_numpy()
+            #    testing_count= testing.value_counts().sort_index().to_numpy()
+            #    cs_statistic = stats.chi2_contingency(np.array([training_count, testing_count]))
+            #    print(feature + ": " + str(cs_statistic.pvalue) + "(Chi-squared)")
+        
         if self.verbose:
-            pass
+            print('Kolmogorov-Smirnov statistic (p-value) for train-test drift')
+            table = pd.DataFrame({
+                'Feature': [feature for feature,_ in ks_statistic.items()],
+                'p-value': [statistic.pvalue for _, statistic in ks_statistic.items()]
+            })
+            print(table.to_string(index=False))
+            #for feature, statistic in ks_statistic.items():
+            #    print(feature + ": " + str(statistic.pvalue))
         else:
-            plt.close(fig)
+            return ks_statistic
 
     #def heat_maps(self, figsize, target=None, value=None, verbose=False):
     #    
@@ -202,69 +351,6 @@ class EDAPipeline:
     #        plt.close(fig)
     #        return pivot
 
-    def outlier_analysis(self, feature, target, sigma, figsize):
-        
-        mean = self.data[feature].mean()
-        std = self.data[feature].std()
-
-        upper_bound = mean + sigma*std
-        lower_bound = mean - sigma*std
-        outlier_mask = [True if val > upper_bound or val < lower_bound else False for val in self.data[feature]]
-        
-        if sum(outlier_mask) == 0:
-            if self.verbose:
-                print('No outliers for ' + feature + " at sigma="+str(sigma))
-            return 
-        outlier_counts = self.data.loc[outlier_mask,target].value_counts().sort_index()
-        base_counts = self.data[target].value_counts().sort_index()
-        
-        fig,ax = plt.subplots(1,2,figsize=figsize)
-        fig.suptitle('Distribution of ' + target + ' for outliers in ' + feature + ' (R) vs base (L)', size='xx-large')
-        sns.barplot(x=outlier_counts.index, y=outlier_counts.values, ax=ax[0])
-        ax[0].bar_label(ax[0].containers[0], labels=[f"{x/sum(outlier_counts.values):.2%}" for x in outlier_counts.values])
-        sns.barplot(x=base_counts.index, y=base_counts.values, ax=ax[1])
-        ax[1].bar_label(ax[1].containers[0], labels=[f"{x/sum(base_counts.values):.2%}" for x in base_counts.values])
-
-        if self.save:
-            fig.savefig(self.output_path + 'outlier_' + feature + '_distribution_plots.png')
-
-        if self.verbose:
-            count = sum(outlier_mask)
-            print(str(count) + ' outliers at sigma=' + str(sigma) + ' for ' + feature + '. Bounds given by [' + str(lower_bound) + ',' + str(upper_bound) + '].')
-        else:
-            plt.close(fig)
-            return (lower_bound, upper_bound), outlier_mask
-
-
-    def KS_test(self, new_EDA):
-        # Find intersection of columns
-        features = set(self.feature_type['discrete'] + self.feature_type['continuous']) & set(new_EDA.feature_type['discrete'] + new_EDA.feature_type['continuous'])
-        
-        ks_statistic = dict()
-
-        for feature in features:
-            training = self.data[feature]
-            testing = new_EDA.data[feature]
-            if feature in self.feature_type['discrete'] or self.feature_type['continuous']:
-                ks_statistic[feature] = stats.kstest(rvs=training.dropna(),cdf=testing.dropna())
-            #if feature in self.feature_type['discrete'] or self.feature_type['categorical']:
-            #    training_count = training.value_counts().sort_index().to_numpy()
-            #    testing_count= testing.value_counts().sort_index().to_numpy()
-            #    cs_statistic = stats.chi2_contingency(np.array([training_count, testing_count]))
-            #    print(feature + ": " + str(cs_statistic.pvalue) + "(Chi-squared)")
-        
-        if self.verbose:
-            print('Kolmogorov-Smirnov statistic (p-value) for train-test drift')
-            table = pd.DataFrame({
-                'Feature': [feature for feature,_ in ks_statistic.items()],
-                'p-value': [statistic.pvalue for _, statistic in ks_statistic.items()]
-            })
-            print(table.to_string(index=False))
-            #for feature, statistic in ks_statistic.items():
-            #    print(feature + ": " + str(statistic.pvalue))
-        else:
-            return ks_statistic
-
 class PreprocessingPipeline:
     '''
     Todo
@@ -295,7 +381,7 @@ class PreprocessingPipeline:
         arguments: a dictionary of arguments for said function 
         '''
             
-    def preprocess(self, verbose: bool = False):
+    def preprocess(self, verbose: bool = False, file_name: str = ''):
 
         train = self.train_raw.copy(deep=True)
         test = self.test_raw.copy(deep=True)
@@ -318,6 +404,10 @@ class PreprocessingPipeline:
             train, test = func(train, test, **kwargs)
             if verbose:
                 print(description)
+
+        if file_name != '':
+            with open(file_name + '.pkl', 'wb') as f:
+                pickle.dump((train,test), f)
 
         return train, test
 
