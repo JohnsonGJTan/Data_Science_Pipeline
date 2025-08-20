@@ -64,6 +64,10 @@ class EDAPipeline:
             count[feature] = self.data[feature].isna().sum()
         count['_total_'] = sum([True for _, row in self.data.iterrows() if any(row.isnull())])
 
+        if count['_total_'] == 0:
+            print('No missing values')
+            return
+
         # Include distribution of missing data to determine MCAR, MAR, or MNAR
         fig, ax = plt.subplots(1,2,figsize=figsize, layout='constrained')
         fig.suptitle('Missing values density and correlation plots', fontsize='xx-large')
