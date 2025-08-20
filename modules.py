@@ -483,7 +483,7 @@ class PreprocessingPipeline:
             value = fill
         impute_col_train = train[col_name].fillna(value)
         impute_col_test = test[col_name].fillna(value)
-        return PreprocessingPipeline.replace_col(train, col_name, impute_col_train), PreprocessingPipeline.replace_col(test, col_name, impute_col_test) 
+        return PreprocessingPipeline.static_replace_col(train, col_name, impute_col_train), PreprocessingPipeline.static_replace_col(test, col_name, impute_col_test) 
 
     def simple_categorical_impute(self, col_name, fill: str = '_mode_'):
         self.pipeline.append(
@@ -502,7 +502,7 @@ class PreprocessingPipeline:
         median = train[col_name].median()
         impute_col_train = train[col_name].fillna(median)
         impute_col_test = test[col_name].fillna(median)
-        return PreprocessingPipeline.replace_col(train, col_name, impute_col_train), PreprocessingPipeline.replace_col(test, col_name, impute_col_test)
+        return PreprocessingPipeline.static_replace_col(train, col_name, impute_col_train), PreprocessingPipeline.static_replace_col(test, col_name, impute_col_test)
     
     def median_impute(self, col_name):
         self.pipeline.append(
@@ -544,13 +544,13 @@ class PreprocessingPipeline:
             outlier_impute_test = test[col_name].clip(lower=lb, upper=ub)
             return pd.concat(
                 [
-                    PreprocessingPipeline.replace_col(train, col_name, outlier_impute_train),
+                    PreprocessingPipeline.static_replace_col(train, col_name, outlier_impute_train),
                     pd.Series(outlier_mask_train, name=col_name + '_outlier_mask')
                 ],
                 axis=1
             ), pd.concat(
                 [
-                    PreprocessingPipeline.replace_col(test, col_name, outlier_impute_test),
+                    PreprocessingPipeline.static_replace_col(test, col_name, outlier_impute_test),
                     pd.Series(outlier_mask_test, name=col_name + '_outlier_mask')
                 ],
                 axis=1
@@ -640,12 +640,12 @@ class PreprocessingPipeline:
         label_encoded_train = LEncoder.transform(train[col_name])
         
         if true_test:
-            return PreprocessingPipeline.replace_col(train, col_name=col_name, new_col=label_encoded_train), test 
+            return PreprocessingPipeline.static_replace_col(train, col_name=col_name, new_col=label_encoded_train), test 
         else:
             label_encoded_test = LEncoder.transform(test[col_name])
             return (
-                PreprocessingPipeline.replace_col(train, col_name=col_name, new_col=label_encoded_train), 
-                PreprocessingPipeline.replace_col(test, col_name=col_name, new_col=label_encoded_test)
+                PreprocessingPipeline.static_replace_col(train, col_name=col_name, new_col=label_encoded_train), 
+                PreprocessingPipeline.static_replace_col(test, col_name=col_name, new_col=label_encoded_test)
             )
         
 
