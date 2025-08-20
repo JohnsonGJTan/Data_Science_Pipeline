@@ -606,8 +606,8 @@ class PreprocessingPipeline:
     '''
 
     @staticmethod
-    def static_ordinal_encoding(train: pd.DataFrame, test: pd.DataFrame, col_names: list[str]):
-        ordinal_encoder = OrdinalEncoder()
+    def static_ordinal_encoding(train: pd.DataFrame, test: pd.DataFrame, col_names: list[str], order: list[list]):
+        ordinal_encoder = OrdinalEncoder(categories=order)
         ordinal_encoded = ordinal_encoder.fit(train[col_names])
         ordinal_encoded.set_output(transform='pandas')
         ordinal_encoded_train = ordinal_encoded.transform(train[col_names])
@@ -621,13 +621,14 @@ class PreprocessingPipeline:
             pd.concat([test.drop(col_names, axis=1), ordinal_encoded_test],axis=1),
         )
 
-    def ordinal_encoding(self, col_names):
+    def ordinal_encoding(self, col_names, order):
         self.pipeline.append(
             (
                 'Ordinal encoding applied to columns ' + ', '.join(col_names) + '.',
                 self.static_ordinal_encoding,
                 {
-                    'col_names': col_names
+                    'col_names': col_names,
+                    'order': order
                 }
             )
         )
