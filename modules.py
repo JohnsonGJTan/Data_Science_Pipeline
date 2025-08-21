@@ -770,6 +770,24 @@ class PreprocessingPipeline:
 
         return [datetime.datetime(y, m, d) for y,m,d in zip(year, month, day)]
 
+    @staticmethod
+    def static_categorical_grouping(train: pd.DataFrame, test: pd.DataFrame, col_name: str, map):
+        new_col_train = pd.Series([map[val] for val in train[col_name]], dtype='category')
+        new_col_test = pd.Series([map[val] for val in test[col_name]], dtype='category')
+        return PreprocessingPipeline.static_replace_col(train, col_name, new_col_train), PreprocessingPipeline.static_replace_col(test, col_name, new_col_test)
+
+    def categorical_grouping(self, col_name: str, map):
+        self.pipeline.append(
+            (
+                '',
+                self.static_categorical_grouping,
+                {
+                    'col_name': col_name,
+                    'map': map
+                }
+            )
+        )
+    
 class ModelingPipeline:
 
     def __init__(self, train: pd.DataFrame, target: str, test: pd.DataFrame = pd.DataFrame([]), verbose: bool = False):
