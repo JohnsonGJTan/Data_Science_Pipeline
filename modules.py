@@ -959,3 +959,20 @@ class ModelingPipeline:
             self.test_scores[model] = copy.deepcopy(metrics)
 
          
+    def display_results(self):
+        
+        print(f'Training/Testing scores:')
+
+        for method in self.methods:
+            print(f'{method}')
+            table = pd.DataFrame(
+                {
+                    'train': [],
+                    'test': []
+                }
+            ).T
+            for model in self.test_scores.keys():
+                table[model] = [self.optimal_training_scores[model][method], self.test_scores[model][method]]
+
+            print(table.to_markdown())
+
