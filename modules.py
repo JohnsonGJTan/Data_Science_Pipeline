@@ -788,6 +788,54 @@ class PreprocessingPipeline:
             )
         )
     
+    @staticmethod
+    def bin_search(val: float, bins: list[float]):
+        
+        # assume inclusions are of the form (a,b]
+
+        assert len(bins) > 0, 'empty bins'
+
+        assert bins == sorted(bins), 'bins are not sorted'
+
+        if val <= bins[0]:
+            return '(-inf, ' + str(bins[0]) + ']'
+        elif val > bins[-1]:
+            return '(' + str(bins[-1]) + ', inf)'
+        else:
+            # binary search for largest bin less than val
+            l, r = 0, len(bins) - 1
+            while l < r:
+                m = (l + r) // 2
+                if val <= bins[m]:
+                    r = m
+                else: # val > bins[m]
+                    l = m + 1
+            return '(' + str(bins[r-1]) + ', ' + str(bins[r]) + ']'
+    
+    @staticmethod
+    def static_numerical_bin(train: pd.DataFrame, test: pd.DataFrame, col_name: str, bins: list[float]):
+        
+        binned_col_train = [PreprocessingPipeline.bin_search(val, bins) for val in train[col_name]]
+        binned_col_test = [PreprocessingPipeline.bin_search(val, bins) for val in test[col_name]]
+
+        return (
+            PreprocessingPipeline.static_replace_col(train, col_name, binned_col_train),
+            PreprocessingPipeline.static_replace_col(test, col_name, binned_col_test)
+        )
+
+
+    def numerical_bin(self, col_name: str, bins: list[float]):
+        self.pipeline.append(
+            (
+                '',
+                self.static_numerical_bin,
+                {
+                    'col_name': col_name,
+                    'bins': bins
+                }
+            )
+        )
+
 class ModelingPipeline:
 
     def __init__(self, train: pd.DataFrame, target: str, test: pd.DataFrame = pd.DataFrame([]), verbose: bool = False):
