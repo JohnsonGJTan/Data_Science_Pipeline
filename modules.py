@@ -689,8 +689,8 @@ class PreprocessingPipeline:
     @staticmethod
     def weighted_mean(data:pd.DataFrame, cols: list[str], target: str, overall_weight: float = 0):
         
-        option_mean = data.groupby(cols)[target].mean()
-        option_weight = data.groupby(cols).size()
+        option_mean = data.groupby(cols, observed=False)[target].mean()
+        option_weight = data.groupby(cols, observed=False).size()
         overall_mean = data[target].mean()
 
         return (option_mean * option_weight + overall_mean * overall_weight) / (option_weight + overall_weight)
