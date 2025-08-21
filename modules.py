@@ -599,10 +599,7 @@ class PreprocessingPipeline:
 
     ### Phase 3: Feature Engineering
     '''
-    - Label Encoding for target variable
-    - One Hot Encoding for features with low class count
     - dense vector embedding for features with high class count
-    - Ordinal encoding for ordered categorical/discrete features
     '''
 
     @staticmethod
