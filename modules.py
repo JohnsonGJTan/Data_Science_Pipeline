@@ -852,7 +852,7 @@ class ModelingPipeline:
             self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
                 train.drop(axis=1,labels=target),
                 train[target],
-                test_size=0.2,
+                test_size=0.5,
                 random_state=42,
                 stratify=train[target]
             )
