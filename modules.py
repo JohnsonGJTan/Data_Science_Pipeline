@@ -1,8 +1,9 @@
 from pathlib import Path
-
+from itertools import product
 import datetime
 import pandas as pd
 import copy
+from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from matplotlib.colors import Normalize
@@ -11,8 +12,13 @@ import missingno as msno
 from scipy import stats
 from sklearn.preprocessing import LabelEncoder, OrdinalEncoder, OneHotEncoder
 from collections import defaultdict
-from sklearn.model_selection import RandomizedSearchCV, train_test_split, KFold
-
+from sklearn.model_selection import RandomizedSearchCV, train_test_split, KFold, StratifiedKFold
+import pickle
+from statistics import fmean
+import time 
+from tqdm import tqdm
+from sklearn.metrics import roc_auc_score
+from functools import partial
 
 class EDAPipeline:
     '''
