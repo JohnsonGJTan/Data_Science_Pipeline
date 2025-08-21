@@ -976,3 +976,12 @@ class ModelingPipeline:
 
             print(table.to_markdown())
 
+    def save(self, file_name: str):
+        with open(file_name + '.pkl', 'wb') as f:
+            pickle.dump(self, f)
+        print(f"Object successfully saved to {file_name}.pkl.")
+    
+    @classmethod
+    def load(cls, file_name: str):
+        with open(file_name, 'rb') as f:
+            return pickle.load(f)
