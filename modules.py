@@ -838,17 +838,18 @@ class PreprocessingPipeline:
 
 class ModelingPipeline:
 
-    def __init__(self, train: pd.DataFrame, target: str, test: pd.DataFrame = pd.DataFrame([]), verbose: bool = False):
+    def __init__(self, train: pd.DataFrame, target: str, models: list,
+                 test: pd.DataFrame = pd.DataFrame([]), verbose: bool = False):
         
         assert target in train.columns, 'target variable is not in data'
 
         self.verbose = verbose
-        self.pipeline = []
-        '''
-        - model name
-        - classifier
-        - parameters for classifier
-        '''
+        self.methods = ['accuracy', 'ROC']
+
+        self.models= models
+        self.optimal_estimators = {}
+        self.optimal_training_scores = defaultdict(partial(defaultdict, float))
+        self.test_scores = {}
         
         if test.empty:
             self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
