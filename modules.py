@@ -699,8 +699,7 @@ class PreprocessingPipeline:
         return (option_mean * option_weight + overall_mean * overall_weight) / (option_weight + overall_weight)
 
     @staticmethod
-    def static_target_encoding(train: pd.DataFrame, test: pd.DataFrame, label: str, col_names: list[str], target:str, 
-                               overall_weight: float = 0, k: int = 1, drop: bool = False):
+    def static_target_encoding(train: pd.DataFrame, test: pd.DataFrame, label: str, col_names: list[str], target:str, overall_weight: float = 0, k: int = 1, drop: bool = False):
         
         assert k > 0, 'cv needs to be a positive integer.'
 
@@ -709,6 +708,10 @@ class PreprocessingPipeline:
             output_train = train.merge(weighted_mean.rename(label), on=col_names)        
             output_test = test.merge(weighted_mean.rename(label), on=col_names)
         else:
+
+            train['__id__'] = list(range(train.shape[0]))
+            test['__id__'] = list(range(test.shape[0]))
+
             kf = KFold(n_splits=k, shuffle=True, random_state=42)
             k_fold_splits_train = []
             k_fold_weights = []
@@ -716,11 +719,11 @@ class PreprocessingPipeline:
                 weighted_mean = PreprocessingPipeline.weighted_mean(train.iloc[train_index], col_names, target, overall_weight)
                 k_fold_splits_train.append(train.iloc[test_index].merge(weighted_mean.rename(label), on=col_names))
                 k_fold_weights.append(weighted_mean)
-            output_train = pd.concat(k_fold_splits_train)
+            output_train = pd.concat(k_fold_splits_train).sort_values(by=['__id__']).drop('__id__', axis=1).reset_index(drop=True)
             weights_avg = sum(k_fold_weights)/k
 
             assert isinstance(weights_avg, pd.Series)
-            output_test = test.merge(weights_avg.rename(label), on=col_names)
+            output_test = test.merge(weights_avg.rename(label), on=col_names).sort_values(by=['__id__']).drop('__id__', axis=1).reset_index(drop=True)
         if drop:
             output_train = output_train.drop(col_names, axis=1)
             output_test = output_test.drop(col_names, axis=1)
