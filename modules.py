@@ -907,3 +907,36 @@ class ModelingPipeline:
                 cv_metrics[method].append(metrics[method])
 
         return cv_metrics
+
+    def find_optimal_hyperparameters(self, score_method: str = 'accuracy', k: int = 5, stratified: bool = False):
+
+        print(f'Finding optimal hyperparameters...')
+
+        for model, base_estimator, params in self.models:
+            
+            start_time = time.time()
+            # iterate over all combinations of hyperparameters and find the best one
+            assert isinstance(params, dict)
+            keys, values = zip(*params.items())
+            for param in tqdm([dict(zip(keys, p)) for p in product(*values)], disable = not self.verbose):
+                estimator = copy.deepcopy(base_estimator)
+                estimator.set_params(**param)
+
+                score = self.cv_score(
+                    X=self.X_train,
+                    y=self.y_train,
+                    estimator=estimator,
+                    methods=self.methods,
+                    stratified=stratified,
+                    k=k
+                )
+                
+                if fmean(score[score_method]) > self.optimal_training_scores[model][score_method]:
+                    self.optimal_estimators[model] = estimator
+                    self.optimal_estimators[model].set_params(**param)
+                    for method in self.methods:
+                        self.optimal_training_scores[model][method] = fmean(score[method])
+
+            elapsed_time = time.time() - start_time
+            print(f'Elapsed time for {model}: {elapsed_time} seconds')
+
