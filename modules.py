@@ -862,38 +862,48 @@ class ModelingPipeline:
             self.X_train, self.y_train = train.drop(target, axis=1, errors='ignore'), train[target]
             self.X_test, self.y_test = test.drop(target, axis=1, errors='ignore'), test[target]
 
-        self.trained_models = defaultdict()
-
-    def train_model(self, model, params, n_iter: int = 20, cv: int = 5, scoring='f1_weighted', n_jobs=-1):
-        classifier = RandomizedSearchCV(
-            estimator=model,
-            param_distributions=params,
-            n_iter=n_iter,
-            cv=cv,
-            scoring=scoring,
-            n_jobs=n_jobs,
-            random_state=42
-        )
-        classifier.fit(self.X_train, self.y_train)
-        return classifier
-
-    def process_pipeline(self, n_iter: int = 20, cv: int = 5, scoring = 'f1_weighted', n_jobs=-1):
+    @staticmethod
+    def score(X: pd.DataFrame, y: pd.Series, fitted_estimator, methods: list[str] = ['accuracy']):
         
-        self.trained_models['best'] = {
-            'model_name': '',
-            'classifier': None,
-            'train_score': 0,
-            'test_score': 0
-        }
-        for model_name, classifier, params in self.pipeline:
-            classifier = self.train_model(classifier, params, n_iter, cv, scoring, n_jobs)
-            y_pred = classifier.predict(self.X_test)
-            test_score = sum(y_pred == self.y_test) / len(y_pred)
-            self.trained_models[model_name] = {
-                'model_name': model_name,
-                'classifier': classifier.best_estimator_,
-                'train_score': classifier.best_score_,
-                'test_score': test_score
-            }
-            if self.trained_models[model_name]['train_score'] > self.trained_models['best']['train_score']:
-                self.trained_models['best'] = copy.deepcopy(self.trained_models[model_name])
+        metrics = {}
+
+        for method in methods:
+            assert method in ['accuracy', 'ROC'], 'Method unknown.'
+            if method == 'accuracy':
+                pred = fitted_estimator.predict(X)
+                metrics['accuracy'] = sum(pred == y) / len(pred)
+            elif method == 'ROC':
+                pred_proba = fitted_estimator.predict_proba(X)[:,1]
+                metrics['ROC'] = roc_auc_score(y, pred_proba)
+
+        return metrics
+
+
+    @staticmethod
+    def cv_score(X: pd.DataFrame, y: pd.Series, estimator, methods: list[str] = ['accuracy'], k: int = 5, stratified: bool = False):
+
+        cv_metrics = defaultdict(list)
+        
+        assert k>1, 'k needs to be bigger than 1'
+
+        if stratified:
+            kf = StratifiedKFold(n_splits=k, shuffle=True, random_state=42)
+        else:
+            kf = KFold(n_splits=k, shuffle=True, random_state=42)
+
+        for train_index, test_index in kf.split(X, y):
+            X_train, y_train = X.iloc[train_index], y.iloc[train_index]
+            X_test, y_test = X.iloc[test_index], y.iloc[test_index]
+            estimator_cv = copy.deepcopy(estimator)
+            estimator_cv.fit(X_train, y_train)
+            
+            metrics = ModelingPipeline.score(
+                X=X_test, 
+                y=y_test, 
+                fitted_estimator=estimator_cv,
+                methods=methods)
+
+            for method in methods:
+                cv_metrics[method].append(metrics[method])
+
+        return cv_metrics
