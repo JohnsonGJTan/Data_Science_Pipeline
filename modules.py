@@ -940,3 +940,22 @@ class ModelingPipeline:
             elapsed_time = time.time() - start_time
             print(f'Elapsed time for {model}: {elapsed_time} seconds')
 
+
+    def eval_on_test(self, methods: list[str] = ['accuracy', 'ROC']):
+
+        print(f'Computing test scores...')
+
+        for model in self.optimal_estimators.keys():
+            fitted_estimator = copy.deepcopy(self.optimal_estimators[model])
+            fitted_estimator.fit(self.X_train, self.y_train)
+
+            metrics = self.score(
+                X=self.X_test,
+                y=self.y_test,
+                fitted_estimator=fitted_estimator,
+                methods=methods
+            )
+            
+            self.test_scores[model] = copy.deepcopy(metrics)
+
+         
