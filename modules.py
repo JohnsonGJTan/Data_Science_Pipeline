@@ -419,7 +419,7 @@ class PreprocessingPipeline:
                 print(description)
 
         if file_name != '':
-            with open(file_name + '.pkl', 'wb') as f:
+            with open(file_name, 'wb') as f:
                 pickle.dump((train,test), f)
 
         return train, test
@@ -1070,7 +1070,7 @@ class ModelingPipeline:
             print(table.to_markdown())
 
     def save(self, file_name: str):
-        with open(file_name + '.pkl', 'wb') as f:
+        with open(file_name, 'wb') as f:
             pickle.dump(self, f)
         printif(f"Object successfully saved to {file_name}.pkl.", self.verbose)
     
