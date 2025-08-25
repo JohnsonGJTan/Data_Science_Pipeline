@@ -13,6 +13,7 @@ from scipy import stats
 from sklearn.preprocessing import LabelEncoder, OrdinalEncoder, OneHotEncoder
 from collections import defaultdict
 from sklearn.model_selection import RandomizedSearchCV, train_test_split, KFold, StratifiedKFold
+from sklearn.linear_model import LogisticRegression
 import pickle
 from statistics import fmean
 import time 
@@ -853,6 +854,8 @@ class ModelingPipeline:
         self.optimal_estimators = {}
         self.optimal_training_scores = defaultdict(partial(defaultdict, float))
         self.test_scores = {}
+
+        self.aggregate_models = {}
         
         if test.empty:
             self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
@@ -942,7 +945,69 @@ class ModelingPipeline:
                         self.optimal_training_scores[model][method] = fmean(score[method])
 
             elapsed_time = time.time() - start_time
-            print(f'Elapsed time for {model}: {elapsed_time} seconds')
+            print(f'Elapsed time for {model}: {elapsed_time} seconds', self.verbose)
+
+    def model_stacking(self, models: list[str] = []):
+        pass
+
+    def model_blending(self, name: str, models: list[str] = [], hold_out: float = 0.5, blender = LogisticRegression(max_iter=10000, solver='liblinear')):
+        
+        assert hold_out > 0 and hold_out < 1, 'hold_out needs to between 0.0 and 1.0'
+
+        assert len(models) > 0, 'No models specified!'
+
+        for model in models:
+            assert model in self.optimal_estimators.keys(), 'Unknown model found: ' + model
+
+        printif('Blending:' + ' + '.join(models) + ' ...',self.verbose)
+
+        X_train_base, X_train_holdout, y_train_base, y_train_holdout= train_test_split(
+                self.X_train,
+                self.y_train,
+                test_size=hold_out,
+                random_state=42,
+                stratify=self.y_train
+            )
+
+        holdout_new_features = {}
+        test_new_features = {}
+
+        base_estimators = {}
+
+        for model in models:
+            base_estimators[model] = copy.deepcopy(self.optimal_estimators[model])
+            base_estimators[model].fit(X_train_base, y_train_base)
+            holdout_new_features[model] = base_estimators[model].predict_proba(X_train_holdout)[:,1]
+            test_new_features[model] = base_estimators[model].predict_proba(self.X_test)[:,1]
+        
+        df_holdout_new_features = pd.concat(
+            [
+                X_train_holdout.reset_index(drop=True),
+                pd.DataFrame(holdout_new_features)
+            ],
+            axis=1
+        )
+
+        # Compute training scores
+        training_scores = ModelingPipeline.cv_score(
+            X=df_holdout_new_features,
+            y=y_train_holdout,
+            estimator = blender,
+            methods=self.methods
+        )
+
+        for method in self.methods:
+            self.optimal_training_scores[name][method] = fmean(training_scores[method])
+
+        # Create blended model pipeline for downstream task
+
+        blended_model = copy.deepcopy(blender)
+        blended_model.fit(df_holdout_new_features, y_train_holdout)
+
+        self.aggregate_models[name] = {
+            'base_estimators': base_estimators,
+            'final_estimator': copy.deepcopy(blended_model)
+        }
 
 
     def eval_on_test(self, methods: list[str] = ['accuracy', 'ROC']):
@@ -961,7 +1026,20 @@ class ModelingPipeline:
             )
             
             self.test_scores[model] = copy.deepcopy(metrics)
+        
+        for aggregate_model in self.aggregate_models.keys():
+            new_features = {}
+            for model in self.aggregate_models[aggregate_model]['base_estimators'].keys():
+                new_features[model] = self.aggregate_models[aggregate_model]['base_estimators'][model].predict_proba(self.X_test)[:,1]
+            
+            metrics = self.score(
+                X=pd.concat([self.X_test.reset_index(drop=True), pd.DataFrame(new_features)], axis=1),
+                y=self.y_test,
+                fitted_estimator = self.aggregate_models[aggregate_model]['final_estimator'],
+                methods=methods
+            )
 
+            self.test_scores[aggregate_model] = copy.deepcopy(metrics)
          
     def display_results(self):
         
