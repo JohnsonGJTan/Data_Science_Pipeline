@@ -1067,7 +1067,11 @@ class ModelingPipeline:
             for model in self.test_scores.keys():
                 table[model] = [self.optimal_training_scores[model][method], self.test_scores[model][method]]
 
-            print(table.to_markdown())
+            full_table[method] = copy.deepcopy(table)
+
+            printif(table.to_markdown(), verbose)
+
+        return full_table
 
     def save(self, file_name: str):
         with open(file_name, 'wb') as f:
