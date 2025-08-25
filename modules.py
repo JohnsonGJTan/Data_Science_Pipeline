@@ -21,6 +21,12 @@ from tqdm import tqdm
 from sklearn.metrics import roc_auc_score
 from functools import partial
 
+def printif(input, condition: bool = True):
+    if condition:
+        print(input)
+    else:
+        pass
+
 class EDAPipeline:
     '''
     Todo:
@@ -917,7 +923,7 @@ class ModelingPipeline:
 
     def find_optimal_hyperparameters(self, score_method: str = 'accuracy', k: int = 5, stratified: bool = False):
 
-        print(f'Finding optimal hyperparameters...')
+        printif(f'Finding optimal hyperparameters...', self.verbose)
 
         for model, base_estimator, params in self.models:
             
@@ -945,7 +951,7 @@ class ModelingPipeline:
                         self.optimal_training_scores[model][method] = fmean(score[method])
 
             elapsed_time = time.time() - start_time
-            print(f'Elapsed time for {model}: {elapsed_time} seconds', self.verbose)
+            printif(f'Elapsed time for {model}: {elapsed_time} seconds', self.verbose)
 
     def model_stacking(self, models: list[str] = []):
         pass
@@ -1012,7 +1018,7 @@ class ModelingPipeline:
 
     def eval_on_test(self, methods: list[str] = ['accuracy', 'ROC']):
 
-        print(f'Computing test scores...')
+        printif(f'Computing test scores...', self.verbose)
 
         for model in self.optimal_estimators.keys():
             fitted_estimator = copy.deepcopy(self.optimal_estimators[model])
@@ -1041,12 +1047,17 @@ class ModelingPipeline:
 
             self.test_scores[aggregate_model] = copy.deepcopy(metrics)
          
-    def display_results(self):
-        
-        print(f'Training/Testing scores:')
+    def display_results(self, verbose = None):
+
+        if verbose is None:
+            verbose = self.verbose
+
+        full_table = {}
+
+        printif(f'Training/Testing scores:', verbose)
 
         for method in self.methods:
-            print(f'{method}')
+            printif(f'{method}', verbose)
             table = pd.DataFrame(
                 {
                     'train': [],
@@ -1061,7 +1072,7 @@ class ModelingPipeline:
     def save(self, file_name: str):
         with open(file_name + '.pkl', 'wb') as f:
             pickle.dump(self, f)
-        print(f"Object successfully saved to {file_name}.pkl.")
+        printif(f"Object successfully saved to {file_name}.pkl.", self.verbose)
     
     @classmethod
     def load(cls, file_name: str):
